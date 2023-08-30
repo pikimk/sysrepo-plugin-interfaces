@@ -1,4 +1,9 @@
 #include "oper.hpp"
+#include "interfaces/src/core/system/Address.hpp"
+#include "interfaces/src/core/system/interface.hpp"
+#include "interfaces/src/core/system/IPV4.hpp"
+#include "interfaces/src/core/system/IPV6.hpp"
+#include "interfaces/src/core/system/Neighbour.hpp"
 
 namespace ietf::ifc {
 namespace sub::oper {
@@ -28,6 +33,23 @@ namespace sub::oper {
         std::optional<ly::DataNode>& output)
     {
         sr::ErrorCode error = sr::ErrorCode::Ok;
+
+        session.switchDatastore(sysrepo::Datastore::Running);
+
+        std::optional<libyang::DataNode> dataNode = session.getData(subXPath->data());
+
+        if (!dataNode.has_value()) {
+            return sr::ErrorCode::NotFound;
+        }
+
+        if (!output.has_value()) {
+
+            return sr::ErrorCode::NotFound;
+        };
+
+        session.switchDatastore(sysrepo::Datastore::Operational);
+
+        output = dataNode;
         return error;
     }
 
@@ -202,6 +224,57 @@ namespace sub::oper {
         std::optional<ly::DataNode>& output)
     {
         sr::ErrorCode error = sr::ErrorCode::Ok;
+
+        // first get the name associated
+        std::string name;
+        if (output.has_value()) {
+            std::optional<libyang::DataNode> name_node = output->findPath(std::string(output->path()).append("/name"));
+            if (name_node.has_value()) {
+                name = name_node->asTerm().valueStr().data();
+            } else {
+                return sr::ErrorCode::NotFound;
+            }
+        } else
+            return sr::ErrorCode::NotFound;
+
+        int ifindex = getIfindexFromName(name);
+
+        if (ifindex == 0) {
+            return sr::ErrorCode::NotFound;
+        }
+
+        int operstate = Interface(ifindex).getOperStatus();
+
+        std::string operstate_str;
+
+        switch (operstate) {
+        case 1:
+            operstate_str = "up";
+            break;
+        case 2:
+            operstate_str = "down";
+            break;
+        case 3:
+            operstate_str = "testing";
+            break;
+        case 4:
+            operstate_str = "unknown";
+            break;
+        case 5:
+            operstate_str = "dormant";
+            break;
+        case 6:
+            operstate_str = "not-present";
+            break;
+        case 7:
+            operstate_str = "lower-layer-down";
+            break;
+        default:
+            operstate_str = "unknown";
+            break;
+        }
+
+        output->newPath(std::string(output->path()).append("/oper-status"), operstate_str);
         return error;
     }
 
@@ -260,6 +333,26 @@ namespace sub::oper {
         std::optional<ly::DataNode>& output)
     {
         sr::ErrorCode error = sr::ErrorCode::Ok;
+
+        std::string name;
+        if (output.has_value()) {
+            std::optional<libyang::DataNode> name_node = output->findPath(std::string(output->path()).append("/name"));
+            if (name_node.has_value()) {
+                name = name_node->asTerm().valueStr().data();
+            } else {
+                return sr::ErrorCode::NotFound;
+            }
+        } else
+            return sr::ErrorCode::NotFound;
+
+        int ifindex = getIfindexFromName(name);
+
+        if (ifindex == 0) {
+            return sr::ErrorCode::NotFound;
+        }
+
+        output->newPath(std::string(output->path()).append("/if-index"), std::to_string(ifindex));
+
         return error;
     }
 
@@ -289,6 +382,28 @@ namespace sub::oper {
         std::optional<ly::DataNode>& output)
     {
         sr::ErrorCode error = sr::ErrorCode::Ok;
+
+        // first get the name associated
+        std::string name;
+        if (output.has_value()) {
+            std::optional<libyang::DataNode> name_node = output->findPath(std::string(output->path()).append("/name"));
+            if (name_node.has_value()) {
+                name = name_node->asTerm().valueStr().data();
+            } else {
+                return sr::ErrorCode::NotFound;
+            }
+        } else
+            return sr::ErrorCode::NotFound;
+
+        int ifindex = getIfindexFromName(name);
+
+        if (ifindex == 0) {
+            return sr::ErrorCode::NotFound;
+        }
+
+        std::string phys_addr = Interface(ifindex).getPhysicalAddress();
+
+        output->newPath(std::string(output->path()).append("/phys-address"), phys_addr);
         return error;
     }
 
@@ -318,6 +433,32 @@ namespace sub::oper {
         std::optional<ly::DataNode>& output)
     {
         sr::ErrorCode error = sr::ErrorCode::Ok;
+
+        // first get the name associated
+        std::string name;
+        if (output.has_value()) {
+            std::optional<libyang::DataNode> name_node = output->findPath(std::string(output->path()).append("/name"));
+            if (name_node.has_value()) {
+                name = name_node->asTerm().valueStr().data();
+            } else {
+                return sr::ErrorCode::NotFound;
+            }
+        } else
+            return sr::ErrorCode::NotFound;
+
+        int ifindex = getIfindexFromName(name);
+
+        if (ifindex == 0) {
+            return sr::ErrorCode::NotFound;
+        }
+
+        std::vector<std::string> high_level_ifs = Interface(ifindex).getHighLevelIf();
+
+        for (std::string& i : high_level_ifs) {
+
+            output->newPath(std::string(output->path()).append("/higher-layer-if"), i);
+        }
+
         return error;
     }
 

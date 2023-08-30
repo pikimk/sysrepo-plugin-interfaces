@@ -3,6 +3,7 @@
 #include <string>
 #include <stdexcept>
 #include <netlink/route/link.h>
+#include <netlink/route/tc.h>
 #include "IPV4.hpp"
 
 // all previous headers in case something is missing
@@ -59,6 +60,10 @@ public:
     void remove();
 
     int getOperStatus();
+
+    std::string getPhysicalAddress();
+
+    std::vector<std::string> getHighLevelIf();
 };
 
 int getIfindexFromName(std::string name);

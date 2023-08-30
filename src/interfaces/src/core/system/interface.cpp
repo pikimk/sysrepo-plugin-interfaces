@@ -162,6 +162,58 @@ int Interface::getOperStatus()
     return operstate;
 }
 
+std::string Interface::getPhysicalAddress()
+{
+
+    nl_sock* socket = NULL;
+    nl_cache* cache = NULL;
+    rtnl_link* link = NULL;
+
+    std::string address;
+
+    auto clear = [&]() {
+        if (socket != NULL)
+            nl_socket_free(socket);
+        if (cache != NULL)
+            nl_cache_put(cache);
+        if (link != NULL)
+            rtnl_link_put(link);
+    };
+
+    socket = nl_socket_alloc();
+    if (!socket) {
+        clear();
+        throw std::runtime_error("Failed to initialize socket!");
+    }
+
+    if (nl_connect(socket, NETLINK_ROUTE) < 0) {
+        clear();
+        throw std::runtime_error("Failed to connect to socket!");
+    }
+
+    if (rtnl_link_alloc_cache(socket, AF_UNSPEC, &cache) < 0) {
+        clear();
+        throw std::runtime_error("Failed to allocate link cache!");
+    }
+
+    link = rtnl_link_get(cache, ifindex);
+
+    rtnl_tc_get_stat(TC_CAST(link), RTNL_TC_PACKETS);
+
+    if (link != NULL) {
+        nl_addr* addr = rtnl_link_get_addr(link);
+        char buffer[50];
+
+        nl_addr2str(addr, buffer, sizeof(buffer));
+
+        address = buffer;
+    }
+
+    clear();
+
+    return address;
+}
+
 std::string Interface::getType()
 {
     nl_sock* socket = NULL;
@@ -611,3 +663,58 @@ int Interface::getMTU()
 
     return mtu;
 };
+
+// not implemented
+std::vector<std::string> Interface::getHighLevelIf()
+{
+    nl_sock* socket = NULL;
+    nl_cache* cache = NULL;
+    rtnl_link* lnk = NULL;
+
+    std::vector<std::string> vec;
+
+    auto clean = [&]() {
+        if (socket != NULL)
+            nl_socket_free(socket);
+        if (cache != NULL)
+            nl_cache_put(cache);
+        if (lnk != NULL)
+            rtnl_link_put(lnk);
+    };
+
+    socket = nl_socket_alloc();
+    if (!socket) {
+        clean();
+        throw std::runtime_error("Failed to initialize socket!");
+    }
+
+    if (nl_connect(socket, NETLINK_ROUTE) < 0) {
+        clean();
+        throw std::runtime_error("Failed to connect to socket!");
+    }
+
+    if (rtnl_link_alloc_cache(socket, AF_UNSPEC, &cache) < 0) {
+        clean();
+        throw std::runtime_error("Failed to allocate link cache!");
+    }
+
+    lnk = rtnl_link_get(cache, this->ifindex);
+
+    int master = rtnl_link_get_master(lnk);
+
+    // it cannot be more than 15 characters, but just to be safe 50
+    char name_buff[50] = { 0 };
+
+    // search the masters hierarhicaly
+    while (master > 0) {
+        rtnl_link_i2name(cache, master, name_buff, sizeof(name_buff));
+        vec.push_back(std::string(name_buff));
+        // don't lose track of the old pointer
+        rtnl_link_put(lnk);
+        lnk = rtnl_link_get(cache, master);
+        master = rtnl_link_get_master(lnk);
+    };
+
+    clean();
+    return vec;
+}

@@ -61,7 +61,9 @@ struct RpcCallback {
  *
  */
 void registerModuleChangeSubscriptions(sr::Session& sess, ietf::ifc::PluginContext& ctx);
+void registerOperationalSubscriptions(sr::Session& sess, ietf::ifc::PluginContext& ctx);
 void loadRunningDatastore(sysrepo::Session& session);
+void loadOperationalDatastore(sysrepo::Session& session);
 
 /**
  * Register all RPC plugin subscriptions.
@@ -92,8 +94,10 @@ int sr_plugin_init_cb(sr_session_ctx_t* session, void** priv)
     // create session subscriptions
     SRPLG_LOG_INF("ietf-interfaces-plugin", "Creating plugin subscriptions");
     loadRunningDatastore(sess);
-    // registerOperationalSubscriptions(sess, *plugin_ctx);
+    loadOperationalDatastore(sess);
+
     registerModuleChangeSubscriptions(sess, *plugin_ctx);
+    registerOperationalSubscriptions(sess, *plugin_ctx);
     // registerRpcSubscriptions(sess, *plugin_ctx);
 
     SRPLG_LOG_INF("ietf-interfaces-plugin", "Created plugin subscriptions");
@@ -144,6 +148,33 @@ void registerModuleChangeSubscriptions(sr::Session& sess, ietf::ifc::PluginConte
     }
 }
 
+void registerOperationalSubscriptions(sr::Session& sess, ietf::ifc::PluginContext& ctx)
+{
+    const auto operationalCallbacks = {
+        // OperationalCallback { "/ietf-interfaces:interfaces/interface", ietf::ifc::sub::oper::InterfaceNameOperGetCb(ctx.getOperContext()) },
+        OperationalCallback {
+            "/ietf-interfaces:interfaces/interface/oper-status", ietf::ifc::sub::oper::InterfaceOperStatusOperGetCb(ctx.getOperContext()) },
+        OperationalCallback {
+            "/ietf-interfaces:interfaces/interface/phys-address", ietf::ifc::sub::oper::InterfacePhysAddressOperGetCb(ctx.getOperContext()) },
+        OperationalCallback {
+            "/ietf-interfaces:interfaces/interface/if-index", ietf::ifc::sub::oper::InterfaceIfIndexOperGetCb(ctx.getOperContext()) },
+         OperationalCallback {
+            "/ietf-interfaces:interfaces/interface/higher-layer-if", ietf::ifc::sub::oper::InterfaceHigherLayerIfOperGetCb(ctx.getOperContext()) },
+
+
+    };
+
+    auto& sub_handle = ctx.getSubscriptionHandle();
+
+    for (auto& cb : operationalCallbacks) {
+        if (sub_handle.has_value()) {
+            sub_handle->onOperGet("ietf-interfaces", cb.callback, cb.xpath);
+        } else {
+            sub_handle = sess.onOperGet("ietf-interfaces", cb.callback, cb.xpath);
+        }
+    }
+}
+
 void loadRunningDatastore(sysrepo::Session& session)
 {
     // first switch to running datastore
@@ -189,7 +220,7 @@ void loadRunningDatastore(sysrepo::Session& session)
 
                 std::string ip_address = addr.getAddressString();
                 std::string prefix_len = std::to_string(addr.getPrefixLen());
-                 session.setItem(
+                session.setItem(
                     "/ietf-interfaces:interfaces/interface[name='" + name + "']/ietf-ip:ipv6/address[ip='" + ip_address + "']/prefix-length",
                     prefix_len);
             }
@@ -198,17 +229,21 @@ void loadRunningDatastore(sysrepo::Session& session)
 
                 std::string ip_address = neigh.getAddress();
                 std::string ll_addr = neigh.getLinkLayer();
-                 session.setItem(
+                session.setItem(
                     "/ietf-interfaces:interfaces/interface[name='" + name + "']/ietf-ip:ipv6/neighbor[ip='" + ip_address + "']/link-layer-address",
-                 ll_addr);
+                    ll_addr);
             }
         }
 
         session.applyChanges();
-
-        // //sess.setItem("/ietf-interfaces:interfaces/interface/name","test_if");
-
-        // session.setItem("/ietf-interfaces:interfaces/interface[name='test_if']/enabled", "true");
-        // session.applyChanges();
     }
 };
+
+void loadOperationalDatastore(sysrepo::Session& session)
+{
+    // first go to operational
+    //  session.switchDatastore(sysrepo::Datastore::Running);
+    //  session.switchDatastore(sysrepo::Datastore::Operational);
+
+    // session.applyChanges();
+}
